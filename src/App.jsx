@@ -6,13 +6,36 @@ import { Spotify } from './util/Spotify';
 import './App.css';
 
 const PENDING_SEARCH_TERM_KEY = 'jammming_pending_search_term';
+const PLAYLIST_NAME_KEY = 'jammming_playlist_name';
+const PLAYLIST_TRACKS_KEY = 'jammming_playlist_tracks';
+
+const loadStoredPlaylistTracks = () => {
+  try {
+    const storedValue = sessionStorage.getItem(PLAYLIST_TRACKS_KEY);
+    if (!storedValue) {
+      return [];
+    }
+
+    const parsedTracks = JSON.parse(storedValue);
+    if (!Array.isArray(parsedTracks)) {
+      return [];
+    }
+
+    return parsedTracks.filter((track) => track?.id && track?.uri);
+  } catch {
+    return [];
+  }
+};
 
 function App() {
   const [searchResults, setSearchResults] = useState([]);
-  const [playlistName, setPlaylistName] = useState('New Playlist');
-  const [playlistTracks, setPlaylistTracks] = useState([]);
+  const [playlistName, setPlaylistName] = useState(
+    () => sessionStorage.getItem(PLAYLIST_NAME_KEY) || 'New Playlist'
+  );
+  const [playlistTracks, setPlaylistTracks] = useState(loadStoredPlaylistTracks);
   const [isConnected, setIsConnected] = useState(Spotify.isAuthenticated());
   const [message, setMessage] = useState('Search for songs, then build your playlist.');
+  const [isSavingPlaylist, setIsSavingPlaylist] = useState(false);
 
   const connectSpotify = () => {
     try {
@@ -26,8 +49,12 @@ function App() {
   };
 
   const addTrack = (track) => {
-    if (playlistTracks.find((savedTrack) => savedTrack.id === track.id)) return;
-    setPlaylistTracks((prev) => [...prev, track]);
+    setPlaylistTracks((prev) => {
+      if (prev.find((savedTrack) => savedTrack.id === track.id)) {
+        return prev;
+      }
+      return [...prev, track];
+    });
   };
 
   const removeTrack = (track) => {
@@ -40,6 +67,7 @@ function App() {
 
   const savePlaylist = async () => {
     const uris = playlistTracks.map((track) => track.uri);
+    setIsSavingPlaylist(true);
     try {
       await Spotify.savePlaylist(playlistName, uris);
       setPlaylistName('New Playlist');
@@ -48,6 +76,8 @@ function App() {
       setMessage('Playlist saved to Spotify.');
     } catch (error) {
       setMessage(error.message);
+    } finally {
+      setIsSavingPlaylist(false);
     }
   };
 
@@ -79,8 +109,25 @@ function App() {
     }
   }, []);
 
+  useEffect(() => {
+    sessionStorage.setItem(PLAYLIST_NAME_KEY, playlistName);
+  }, [playlistName]);
+
+  useEffect(() => {
+    sessionStorage.setItem(PLAYLIST_TRACKS_KEY, JSON.stringify(playlistTracks));
+  }, [playlistTracks]);
+
+  const filteredSearchResults = searchResults.filter(
+    (track) => !playlistTracks.some((playlistTrack) => playlistTrack.id === track.id)
+  );
+
   return (
     <div className="app">
+      {isSavingPlaylist ? (
+        <div className="loading-overlay" role="status" aria-live="polite">
+          <div className="loading-card">Saving playlist to Spotify...</div>
+        </div>
+      ) : null}
       <h1>
         Ja<span>mmm</span>ing
       </h1>
@@ -92,13 +139,14 @@ function App() {
       <SearchBar onSearch={search} />
       <p style={{ textAlign: 'center', marginTop: '1rem' }}>{message}</p>
       <div className="app-playlist">
-        <SearchResults searchResults={searchResults} onAdd={addTrack} />
+        <SearchResults searchResults={filteredSearchResults} onAdd={addTrack} />
         <Playlist
           playlistName={playlistName}
           playlistTracks={playlistTracks}
           onRemove={removeTrack}
           onNameChange={updatePlaylistName}
           onSave={savePlaylist}
+          isSaving={isSavingPlaylist}
         />
       </div>
     </div>

@@ -10,6 +10,7 @@ const EXPIRES_AT_KEY = 'jammming_spotify_expires_at';
 
 let accessToken = '';
 let expiresAt = 0;
+let tokenExpiryTimer = null;
 
 const parseHashParams = (hash) => {
   const params = new URLSearchParams(hash.replace(/^#/, ''));
@@ -31,13 +32,36 @@ const persistToken = (token, newExpiresAt) => {
   expiresAt = newExpiresAt;
   sessionStorage.setItem(ACCESS_TOKEN_KEY, token);
   sessionStorage.setItem(EXPIRES_AT_KEY, String(newExpiresAt));
+  scheduleTokenExpiry(newExpiresAt);
 };
 
 const clearStoredToken = () => {
+  clearTokenExpiryTimer();
   accessToken = '';
   expiresAt = 0;
   sessionStorage.removeItem(ACCESS_TOKEN_KEY);
   sessionStorage.removeItem(EXPIRES_AT_KEY);
+};
+
+const clearTokenExpiryTimer = () => {
+  if (tokenExpiryTimer) {
+    window.clearTimeout(tokenExpiryTimer);
+    tokenExpiryTimer = null;
+  }
+};
+
+const scheduleTokenExpiry = (newExpiresAt) => {
+  clearTokenExpiryTimer();
+  const msUntilExpiry = newExpiresAt - Date.now();
+
+  if (msUntilExpiry <= 0) {
+    clearStoredToken();
+    return;
+  }
+
+  tokenExpiryTimer = window.setTimeout(() => {
+    clearStoredToken();
+  }, msUntilExpiry);
 };
 
 const mapTrack = (track) => ({
@@ -45,7 +69,10 @@ const mapTrack = (track) => ({
   name: track.name,
   artist: track.artists?.map((artist) => artist.name).join(', ') || 'Unknown Artist',
   album: track.album?.name || 'Unknown Album',
-  uri: track.uri
+  uri: track.uri,
+  previewUrl: track.preview_url || '',
+  durationMs: track.duration_ms || 0,
+  spotifyUrl: track.external_urls?.spotify || ''
 });
 
 const ensureClientId = () => {
@@ -69,6 +96,7 @@ const getStoredToken = () => {
 
   accessToken = storedToken;
   expiresAt = storedExpiresAt;
+  scheduleTokenExpiry(storedExpiresAt);
   return accessToken;
 };
 
@@ -100,7 +128,8 @@ const getAccessToken = ({ allowRedirect }) => {
   }
 
   if (token) {
-    persistToken(token, now + expiresIn * 1000);
+    const issuedAt = Date.now();
+    persistToken(token, issuedAt + expiresIn * 1000);
     clearAuthHash();
     return accessToken;
   }
@@ -119,7 +148,7 @@ const getAccessToken = ({ allowRedirect }) => {
   return '';
 };
 
-const spotifyRequest = async (endpoint, options = {}) => {
+const spotifyRequest = async (endpoint, options = {}, retryOnUnauthorized = true) => {
   const token = getAccessToken({ allowRedirect: true });
   if (!token) {
     return null;
@@ -133,6 +162,11 @@ const spotifyRequest = async (endpoint, options = {}) => {
       ...options.headers
     }
   });
+
+  if (response.status === 401 && retryOnUnauthorized) {
+    clearStoredToken();
+    return spotifyRequest(endpoint, options, false);
+  }
 
   if (!response.ok) {
     const errorText = await response.text();

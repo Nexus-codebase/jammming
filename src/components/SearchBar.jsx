@@ -15,7 +15,7 @@ function SearchBar({ onSearch }) {
         type="text"
         value={term}
         onChange={(event) => setTerm(event.target.value)}
-        placeholder="Search songs, artists, albums"
+        placeholder="Search title or use artist:, album:, genre:"
         style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid #e5d3ab' }}
       />
       <div style={{ marginTop: '0.75rem', textAlign: 'right' }}>
