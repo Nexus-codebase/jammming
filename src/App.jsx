@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import SearchBar from './components/SearchBar';
 import SearchResults from './components/SearchResults';
 import Playlist from './components/Playlist';
 import { Spotify } from './util/Spotify';
 import './App.css';
+
+const PENDING_SEARCH_TERM_KEY = 'jammming_pending_search_term';
 
 function App() {
   const [searchResults, setSearchResults] = useState([]);
@@ -50,17 +52,32 @@ function App() {
   };
 
   const search = async (term) => {
+    const cleanTerm = term.trim();
+    if (!cleanTerm) {
+      return;
+    }
+
+    sessionStorage.setItem(PENDING_SEARCH_TERM_KEY, cleanTerm);
+
     try {
-      const results = await Spotify.search(term);
+      const results = await Spotify.search(cleanTerm);
       setSearchResults(results);
       setIsConnected(true);
       setMessage(results.length ? `Found ${results.length} track(s).` : 'No matching tracks found.');
+      sessionStorage.removeItem(PENDING_SEARCH_TERM_KEY);
     } catch (error) {
       setMessage(error.message);
       setIsConnected(false);
       setSearchResults([]);
     }
   };
+
+  useEffect(() => {
+    const pendingTerm = sessionStorage.getItem(PENDING_SEARCH_TERM_KEY);
+    if (pendingTerm && Spotify.isAuthenticated()) {
+      search(pendingTerm);
+    }
+  }, []);
 
   return (
     <div className="app">
