@@ -32,7 +32,7 @@ jobs:
 
       - name: Build app
         env:
-          VITE_SPOTIFY_CLIENT_ID: ${{ vars.VITE_SPOTIFY_CLIENT_ID }}
+          VITE_SPOTIFY_CLIENT_ID: 3d710f23ea1f4c60b9d86b7ac48f850a
           VITE_SPOTIFY_REDIRECT_URI: https://nexus-codebase.github.io/jammming/
         run: npm run build
 
