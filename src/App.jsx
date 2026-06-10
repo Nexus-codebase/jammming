@@ -9,7 +9,19 @@ function App() {
   const [searchResults, setSearchResults] = useState([]);
   const [playlistName, setPlaylistName] = useState('New Playlist');
   const [playlistTracks, setPlaylistTracks] = useState([]);
+  const [isConnected, setIsConnected] = useState(Spotify.isAuthenticated());
   const [message, setMessage] = useState('Search for songs, then build your playlist.');
+
+  const connectSpotify = () => {
+    try {
+      Spotify.connect();
+      setIsConnected(true);
+      setMessage('Spotify connected. You can search and save playlists.');
+    } catch (error) {
+      setMessage(error.message);
+      setIsConnected(false);
+    }
+  };
 
   const addTrack = (track) => {
     if (playlistTracks.find((savedTrack) => savedTrack.id === track.id)) return;
@@ -30,6 +42,7 @@ function App() {
       await Spotify.savePlaylist(playlistName, uris);
       setPlaylistName('New Playlist');
       setPlaylistTracks([]);
+      setIsConnected(true);
       setMessage('Playlist saved to Spotify.');
     } catch (error) {
       setMessage(error.message);
@@ -40,9 +53,11 @@ function App() {
     try {
       const results = await Spotify.search(term);
       setSearchResults(results);
+      setIsConnected(true);
       setMessage(results.length ? `Found ${results.length} track(s).` : 'No matching tracks found.');
     } catch (error) {
       setMessage(error.message);
+      setIsConnected(false);
       setSearchResults([]);
     }
   };
@@ -52,6 +67,11 @@ function App() {
       <h1>
         Ja<span>mmm</span>ing
       </h1>
+      <div style={{ textAlign: 'center', marginBottom: '0.75rem' }}>
+        <button type="button" className="secondary-btn" onClick={connectSpotify}>
+          {isConnected ? 'Reconnect Spotify' : 'Connect Spotify'}
+        </button>
+      </div>
       <SearchBar onSearch={search} />
       <p style={{ textAlign: 'center', marginTop: '1rem' }}>{message}</p>
       <div className="app-playlist">

@@ -5,6 +5,9 @@ const SCOPES = [
   'playlist-modify-public'
 ].join(' ');
 
+const ACCESS_TOKEN_KEY = 'jammming_spotify_access_token';
+const EXPIRES_AT_KEY = 'jammming_spotify_expires_at';
+
 let accessToken = '';
 let expiresAt = 0;
 
@@ -12,13 +15,29 @@ const parseHashParams = (hash) => {
   const params = new URLSearchParams(hash.replace(/^#/, ''));
   return {
     token: params.get('access_token') || '',
-    expiresIn: Number(params.get('expires_in') || 0)
+    expiresIn: Number(params.get('expires_in') || 0),
+    error: params.get('error') || '',
+    errorDescription: params.get('error_description') || ''
   };
 };
 
 const clearAuthHash = () => {
   const cleanUrl = `${window.location.origin}${window.location.pathname}`;
   window.history.replaceState({}, document.title, cleanUrl);
+};
+
+const persistToken = (token, newExpiresAt) => {
+  accessToken = token;
+  expiresAt = newExpiresAt;
+  sessionStorage.setItem(ACCESS_TOKEN_KEY, token);
+  sessionStorage.setItem(EXPIRES_AT_KEY, String(newExpiresAt));
+};
+
+const clearStoredToken = () => {
+  accessToken = '';
+  expiresAt = 0;
+  sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+  sessionStorage.removeItem(EXPIRES_AT_KEY);
 };
 
 const mapTrack = (track) => ({
@@ -35,7 +54,25 @@ const ensureClientId = () => {
   }
 };
 
-const ensureAccessToken = () => {
+const getStoredToken = () => {
+  const storedToken = sessionStorage.getItem(ACCESS_TOKEN_KEY) || '';
+  const storedExpiresAt = Number(sessionStorage.getItem(EXPIRES_AT_KEY) || 0);
+
+  if (!storedToken || !storedExpiresAt) {
+    return '';
+  }
+
+  if (Date.now() >= storedExpiresAt) {
+    clearStoredToken();
+    return '';
+  }
+
+  accessToken = storedToken;
+  expiresAt = storedExpiresAt;
+  return accessToken;
+};
+
+const getAccessToken = ({ allowRedirect }) => {
   ensureClientId();
 
   const now = Date.now();
@@ -43,12 +80,33 @@ const ensureAccessToken = () => {
     return accessToken;
   }
 
-  const { token, expiresIn } = parseHashParams(window.location.hash);
+  const storedToken = getStoredToken();
+  if (storedToken) {
+    return storedToken;
+  }
+
+  const {
+    token,
+    expiresIn,
+    error,
+    errorDescription
+  } = parseHashParams(window.location.hash);
+
+  if (error) {
+    clearAuthHash();
+    throw new Error(
+      `Spotify authorization failed: ${errorDescription || error}. Click Connect Spotify and try again.`
+    );
+  }
+
   if (token) {
-    accessToken = token;
-    expiresAt = now + expiresIn * 1000;
+    persistToken(token, now + expiresIn * 1000);
     clearAuthHash();
     return accessToken;
+  }
+
+  if (!allowRedirect) {
+    return '';
   }
 
   const authUrl = new URL('https://accounts.spotify.com/authorize');
@@ -62,7 +120,7 @@ const ensureAccessToken = () => {
 };
 
 const spotifyRequest = async (endpoint, options = {}) => {
-  const token = ensureAccessToken();
+  const token = getAccessToken({ allowRedirect: true });
   if (!token) {
     return null;
   }
@@ -89,6 +147,18 @@ const spotifyRequest = async (endpoint, options = {}) => {
 };
 
 export const Spotify = {
+  connect() {
+    getAccessToken({ allowRedirect: true });
+  },
+
+  isAuthenticated() {
+    try {
+      return Boolean(getAccessToken({ allowRedirect: false }));
+    } catch {
+      return false;
+    }
+  },
+
   async search(term) {
     if (!term.trim()) {
       return [];
