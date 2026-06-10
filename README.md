@@ -71,6 +71,18 @@ Deployment checklist:
 3. Build command: `npm run build`
 4. Publish directory: `dist`
 
+### GitHub Pages (Configured)
+
+This repository includes a workflow at `.github/workflows/deploy-pages.yml` that automatically deploys on every push to `main`.
+
+Required repository variable:
+
+- `VITE_SPOTIFY_CLIENT_ID` = your Spotify app client ID
+
+Configured production redirect URI:
+
+- `https://nexus-codebase.github.io/jammming/`
+
 ## Future Work
 
 - Add support for searching by additional Spotify entities (albums, artists, playlists)
